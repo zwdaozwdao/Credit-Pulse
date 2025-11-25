@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useConnect, useAccount } from 'wagmi';
+import { useConnect, useAccount, useChainId, useSwitchChain } from 'wagmi';
+import { sepolia } from 'wagmi/chains';
 
 // Fixed wallet list with install URLs
 const WALLETS = [
@@ -166,6 +167,15 @@ export function ConnectWalletButton() {
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const { connect, connectors, isPending } = useConnect();
   const { isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+
+  // Auto-switch to Sepolia when connected but on wrong network
+  useEffect(() => {
+    if (isConnected && chainId !== sepolia.id) {
+      switchChain?.({ chainId: sepolia.id });
+    }
+  }, [isConnected, chainId, switchChain]);
 
   if (isConnected) return null;
 
@@ -178,6 +188,10 @@ export function ConnectWalletButton() {
     if (connector) {
       try {
         await connect({ connector });
+        // Switch to Sepolia after connection
+        setTimeout(() => {
+          switchChain?.({ chainId: sepolia.id });
+        }, 500);
         setShowModal(false);
       } catch (error) {
         console.error('Connection failed:', error);
