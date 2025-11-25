@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useConnect, useAccount, useChainId } from 'wagmi';
 
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
 const SEPOLIA_CHAIN_ID = 11155111;
 
 // Switch to Sepolia network using wallet API
