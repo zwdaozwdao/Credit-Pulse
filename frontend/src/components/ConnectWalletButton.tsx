@@ -202,13 +202,20 @@ function WalletModal({
 export function ConnectWalletButton() {
   const [showModal, setShowModal] = useState(false);
   const [connectingId, setConnectingId] = useState<string | null>(null);
-  const { connect, connectors, isPending } = useConnect();
+  const { connect, connectors, isPending } = useConnect({
+    mutation: {
+      onSuccess: () => {
+        // Switch to Sepolia immediately after successful connection
+        switchToSepolia();
+      },
+    },
+  });
   const { isConnected } = useAccount();
   const chainId = useChainId();
 
-  // Auto-switch to Sepolia when connected but on wrong network
+  // Also monitor chain changes
   useEffect(() => {
-    if (isConnected && chainId !== SEPOLIA_CHAIN_ID) {
+    if (isConnected && chainId && chainId !== SEPOLIA_CHAIN_ID) {
       switchToSepolia();
     }
   }, [isConnected, chainId]);
@@ -223,11 +230,7 @@ export function ConnectWalletButton() {
     
     if (connector) {
       try {
-        await connect({ connector });
-        // Switch to Sepolia after connection
-        setTimeout(() => {
-          switchToSepolia();
-        }, 500);
+        connect({ connector });
         setShowModal(false);
       } catch (error) {
         console.error('Connection failed:', error);
