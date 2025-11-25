@@ -26,7 +26,7 @@ interface AssessmentInput {
 export default function Home() {
   const [state, setState] = useState<AppState>('landing');
   const [processingStep, setProcessingStep] = useState<ProcessingStep>('encrypting');
-  const [result, setResult] = useState<{ scaleScore: number; healthScore: number } | null>(null);
+  const [result, setResult] = useState<{ scaleScore: number; healthScore: number; txHash?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const { address, isConnected, chain } = useAccount();
@@ -170,7 +170,7 @@ export default function Home() {
 
       console.log('✅ Decrypted results:', { scaleScore, healthScore });
       
-      setResult({ scaleScore, healthScore });
+      setResult({ scaleScore, healthScore, txHash });
       setState('result');
 
     } catch (err: any) {
@@ -260,6 +260,7 @@ export default function Home() {
           scaleScore={result.scaleScore}
           healthScore={result.healthScore}
           onReset={handleReset}
+          txHash={result.txHash}
         />
       ) : null;
     default:
