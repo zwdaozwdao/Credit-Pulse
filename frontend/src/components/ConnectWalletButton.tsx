@@ -2,8 +2,39 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useConnect, useAccount, useChainId, useSwitchChain } from 'wagmi';
-import { sepolia } from 'wagmi/chains';
+import { useConnect, useAccount, useChainId } from 'wagmi';
+
+const SEPOLIA_CHAIN_ID = 11155111;
+
+// Switch to Sepolia network using wallet API
+async function switchToSepolia() {
+  if (typeof window === 'undefined' || !window.ethereum) return;
+  
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: `0x${SEPOLIA_CHAIN_ID.toString(16)}` }],
+    });
+  } catch (switchError: any) {
+    // Chain not added, add it
+    if (switchError.code === 4902) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: `0x${SEPOLIA_CHAIN_ID.toString(16)}`,
+            chainName: 'Sepolia Testnet',
+            nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: ['https://rpc.sepolia.org'],
+            blockExplorerUrls: ['https://sepolia.etherscan.io'],
+          }],
+        });
+      } catch (addError) {
+        console.error('Failed to add Sepolia:', addError);
+      }
+    }
+  }
+}
 
 // Fixed wallet list with install URLs
 const WALLETS = [
@@ -168,14 +199,13 @@ export function ConnectWalletButton() {
   const { connect, connectors, isPending } = useConnect();
   const { isConnected } = useAccount();
   const chainId = useChainId();
-  const { switchChain } = useSwitchChain();
 
   // Auto-switch to Sepolia when connected but on wrong network
   useEffect(() => {
-    if (isConnected && chainId !== sepolia.id) {
-      switchChain?.({ chainId: sepolia.id });
+    if (isConnected && chainId !== SEPOLIA_CHAIN_ID) {
+      switchToSepolia();
     }
-  }, [isConnected, chainId, switchChain]);
+  }, [isConnected, chainId]);
 
   if (isConnected) return null;
 
@@ -190,7 +220,7 @@ export function ConnectWalletButton() {
         await connect({ connector });
         // Switch to Sepolia after connection
         setTimeout(() => {
-          switchChain?.({ chainId: sepolia.id });
+          switchToSepolia();
         }, 500);
         setShowModal(false);
       } catch (error) {
