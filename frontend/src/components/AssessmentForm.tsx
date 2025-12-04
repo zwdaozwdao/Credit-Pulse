@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { METRICS } from '@/lib/config';
 
 interface AssessmentInput {
@@ -19,6 +19,44 @@ interface AssessmentFormProps {
   isSubmitting: boolean;
 }
 
+// Skeleton component for loading state
+function FormSkeleton() {
+  return (
+    <div className="container mx-auto px-6 py-12 max-w-5xl animate-pulse">
+      {/* Navigation skeleton */}
+      <div className="flex items-center justify-between mb-8">
+        <div className="h-6 w-16 bg-slate-200 rounded" />
+        <div className="h-6 w-16 bg-slate-200 rounded" />
+      </div>
+
+      {/* Header skeleton */}
+      <div className="mb-12 text-center space-y-4">
+        <div className="h-10 w-96 bg-slate-200 rounded mx-auto" />
+        <div className="h-6 w-full max-w-2xl bg-slate-100 rounded mx-auto" />
+      </div>
+
+      {/* Cards skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="glass-card p-8 rounded-2xl space-y-5">
+            <div className="h-6 w-40 bg-slate-200 rounded" />
+            <div className="space-y-3">
+              {[...Array(i < 3 ? 5 : 3)].map((_, j) => (
+                <div key={j} className="h-12 w-full bg-slate-100 rounded-xl" />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Button skeleton */}
+      <div className="mt-12 flex justify-center">
+        <div className="h-14 w-72 bg-slate-200 rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
 export function AssessmentForm({ onSubmit, onBack, onHome, isSubmitting }: AssessmentFormProps) {
   const [formData, setFormData] = useState<AssessmentInput>({
     revenue: 0,
@@ -28,6 +66,13 @@ export function AssessmentForm({ onSubmit, onBack, onHome, isSubmitting }: Asses
     cashflow: 0,
     litigation: 0,
   });
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Simulate initial loading (for smooth transition)
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
 
   const isComplete = Object.values(formData).every(v => v !== 0);
 
@@ -35,13 +80,18 @@ export function AssessmentForm({ onSubmit, onBack, onHome, isSubmitting }: Asses
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
+  // Show skeleton while loading
+  if (isLoading) {
+    return <FormSkeleton />;
+  }
+
   return (
     <div className="container mx-auto px-6 py-12 max-w-5xl">
       {/* Navigation Bar */}
       <div className="flex items-center justify-between mb-8">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-slate-900 hover:text-slate-900 transition-colors"
+          className="flex items-center gap-2 text-slate-900 hover:text-slate-700 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -50,7 +100,7 @@ export function AssessmentForm({ onSubmit, onBack, onHome, isSubmitting }: Asses
         </button>
         <button
           onClick={onHome}
-          className="flex items-center gap-2 text-slate-900 hover:text-slate-900 transition-colors"
+          className="flex items-center gap-2 text-slate-900 hover:text-slate-700 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -70,14 +120,18 @@ export function AssessmentForm({ onSubmit, onBack, onHome, isSubmitting }: Asses
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {Object.entries(METRICS).map(([key, metric]) => (
-          <div key={key} className="glass-card p-8 rounded-2xl space-y-5 hover:shadow-xl transition-shadow duration-300">
+        {Object.entries(METRICS).map(([key, metric], index) => (
+          <div 
+            key={key} 
+            className="glass-card p-8 rounded-2xl space-y-5 hover:shadow-xl transition-all duration-300"
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
             <div className="flex items-center justify-between">
               <label className="text-lg font-semibold text-slate-800 font-serif-display">
                 {metric.label}
               </label>
               {formData[key as keyof AssessmentInput] !== 0 && (
-                <span className="text-emerald-500">
+                <span className="text-emerald-500 animate-in fade-in duration-200">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>

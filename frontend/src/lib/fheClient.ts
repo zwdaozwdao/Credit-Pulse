@@ -21,25 +21,18 @@ export const fheClient = {
 
     initPromise = (async () => {
       try {
-        console.log('🔄 Loading @zama-fhe/relayer-sdk/web v0.3...');
-        
         // Dynamic import with correct path for browser
         const { initSDK, createInstance, SepoliaConfig } = await import('@zama-fhe/relayer-sdk/web');
         
-        console.log('📦 SDK loaded, SepoliaConfig:', SepoliaConfig);
-        
         // Initialize SDK (TFHE WASM)
-        console.log('🔄 Initializing SDK...');
         await initSDK();
-        
-        console.log('🔄 Creating FHEVM instance with SepoliaConfig...');
         
         // Create instance with built-in Sepolia config
         fhevmInstance = await createInstance(SepoliaConfig);
-        
-        console.log('✅ FHE Client initialized successfully');
       } catch (error) {
-        console.error('❌ FHE init failed:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('FHE init failed:', error);
+        }
         initPromise = null;
         throw error;
       }
@@ -70,8 +63,6 @@ export const fheClient = {
     if (!fhevmInstance) {
       throw new Error('FHE not initialized');
     }
-
-    console.log('🔐 Creating encrypted input...');
     
     const input = fhevmInstance.createEncryptedInput(
       CREDIT_PULSE_CONTRACT_ADDRESS,
@@ -86,10 +77,7 @@ export const fheClient = {
     input.add8(data.cashflow);
     input.add8(data.litigation);
 
-    console.log('🔐 Encrypting...');
     const encrypted = await input.encrypt();
-    
-    console.log('✅ Encryption complete');
 
     return {
       encRevenue: encrypted.handles[0],
@@ -110,13 +98,8 @@ export const fheClient = {
     if (!fhevmInstance) {
       throw new Error('FHE not initialized');
     }
-
-    console.log('🔓 Starting public decryption...');
-    console.log('Handles to decrypt:', handles);
     
     const results = await fhevmInstance.publicDecrypt(handles);
-    
-    console.log('✅ Public decryption complete:', results);
     return results;
   },
 
@@ -131,12 +114,9 @@ export const fheClient = {
     if (!fhevmInstance) {
       throw new Error('FHE not initialized');
     }
-
-    console.log('🔓 Starting user decryption...');
     
     // Generate keypair for decryption
     const { publicKey, privateKey } = fhevmInstance.generateKeypair();
-    console.log('🔑 Keypair generated');
     
     // Get contract addresses from handles
     const contractAddresses = [...new Set(handles.map(h => h.contractAddress))];
@@ -152,9 +132,6 @@ export const fheClient = {
       durationDays
     );
     
-    console.log('📝 Requesting signature...');
-    console.log('EIP712 data:', eip712);
-    
     // Remove EIP712Domain from types (ethers.js handles it via domain)
     const { EIP712Domain, ...typesWithoutDomain } = eip712.types;
     
@@ -164,8 +141,6 @@ export const fheClient = {
       typesWithoutDomain,
       eip712.message
     );
-    
-    console.log('✅ Signature obtained');
     
     // Get user address
     const userAddress = await signer.getAddress();
@@ -182,7 +157,6 @@ export const fheClient = {
       durationDays
     );
     
-    console.log('✅ User decryption complete:', results);
     return results;
   },
 
@@ -197,16 +171,12 @@ export const fheClient = {
     if (!fhevmInstance) {
       throw new Error('FHE not initialized');
     }
-
-    console.log('🔓 Decrypting assessment results...');
     
     const results = await this.publicDecrypt([scaleGradeHandle, healthGradeHandle]);
     
     // Extract values from results
     const scaleGrade = Number(results[scaleGradeHandle] || 0);
     const healthGrade = Number(results[healthGradeHandle] || 0);
-    
-    console.log('✅ Decrypted - Scale:', scaleGrade, 'Health:', healthGrade);
     
     return { scaleGrade, healthGrade };
   },

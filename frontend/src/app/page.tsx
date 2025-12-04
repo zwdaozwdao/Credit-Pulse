@@ -71,7 +71,6 @@ export default function Home() {
     try {
       // Step 1: FHE Encrypt
       setProcessingStep('encrypting');
-      console.log('🔐 Encrypting with FHE...');
       
       const { fheClient } = await import('@/lib/fheClient');
       
@@ -80,11 +79,9 @@ export default function Home() {
       }
       
       const encrypted = await fheClient.encryptAssessment(input, address);
-      console.log('✅ FHE Encryption complete');
 
       // Step 2: Submit to blockchain
       setProcessingStep('submitting');
-      console.log('📤 Submitting to blockchain...');
       
       const toHex = (arr: Uint8Array): `0x${string}` => {
         return `0x${Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('')}`;
@@ -104,26 +101,20 @@ export default function Home() {
           toHex(encrypted.inputProof),
         ],
       });
-      
-      console.log('✅ TX:', txHash);
 
       // Step 3: Wait for transaction confirmation and on-chain FHE computation
       setProcessingStep('computing');
-      console.log('⏳ Waiting for transaction confirmation...');
       
       // Wait for transaction receipt
       if (publicClient) {
         await publicClient.waitForTransactionReceipt({ hash: txHash });
-        console.log('✅ Transaction confirmed');
       }
       
       // Additional wait for FHE computation to complete on-chain
-      console.log('⏳ Waiting for on-chain FHE computation...');
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Step 4: Read encrypted handles from contract
       setProcessingStep('decrypting');
-      console.log('🔓 Reading encrypted results from contract...');
       
       // Read the encrypted handles from contract
       const scaleHandle = await publicClient?.readContract({
@@ -140,11 +131,7 @@ export default function Home() {
         args: [address],
       });
       
-      console.log('📦 Encrypted handles:', { scaleHandle, healthHandle });
-      
       // Step 5: Decrypt using FHE SDK with user signature
-      console.log('🔓 Decrypting with user signature...');
-      
       // Get ethereum provider from window
       const ethereum = (window as any).ethereum;
       if (!ethereum) {
@@ -161,20 +148,19 @@ export default function Home() {
         { handle: `0x${BigInt(healthHandle as bigint).toString(16).padStart(64, '0')}`, contractAddress: CREDIT_PULSE_CONTRACT_ADDRESS },
       ];
       
-      console.log('🔐 Requesting decryption signature...');
       const decryptedResults = await fheClient.userDecrypt(handles, signer);
       
       // Extract decrypted values
       const scaleScore = Number(decryptedResults[handles[0].handle] || 0);
       const healthScore = Number(decryptedResults[handles[1].handle] || 0);
-
-      console.log('✅ Decrypted results:', { scaleScore, healthScore });
       
       setResult({ scaleScore, healthScore, txHash });
       setState('result');
 
     } catch (err: any) {
-      console.error('❌ Failed:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Assessment failed:', err);
+      }
       
       let errorMessage = 'Assessment failed';
       if (err.message?.includes('user rejected')) {
