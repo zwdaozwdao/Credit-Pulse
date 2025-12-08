@@ -140,7 +140,7 @@ export default function Home() {
           }) as bigint;
           
           // Check if we got valid handles (non-zero)
-          if (scaleHandle && healthHandle && scaleHandle > 0n && healthHandle > 0n) {
+          if (scaleHandle && healthHandle && scaleHandle > BigInt(0) && healthHandle > BigInt(0)) {
             break;
           }
         } catch (readError) {
@@ -156,7 +156,7 @@ export default function Home() {
       }
       
       // Validate handles exist
-      if (!scaleHandle || !healthHandle || scaleHandle === 0n || healthHandle === 0n) {
+      if (!scaleHandle || !healthHandle || scaleHandle === BigInt(0) || healthHandle === BigInt(0)) {
         throw new Error('Assessment data not ready. Please wait a moment and try again.');
       }
       
