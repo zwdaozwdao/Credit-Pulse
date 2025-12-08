@@ -103,7 +103,7 @@ export const fheClient = {
     }
     
     // Generate keypair for decryption
-    const { publicKey, privateKey } = fhevmInstance.generateKeypair();
+    const keypair = fhevmInstance.generateKeypair();
     
     // Get contract addresses from handles
     const contractAddresses = [...new Set(handles.map(h => h.contractAddress))];
@@ -111,98 +111,54 @@ export const fheClient = {
     // Get user address
     const userAddress = await signer.getAddress();
     
-    // Time parameters for EIP712
-    const startTimestamp = Math.floor(Date.now() / 1000);
-    const durationDays = 1; // Valid for 1 day
+    // Time parameters for EIP712 - MUST be strings!
+    const startTimestamp = Math.floor(Date.now() / 1000).toString();
+    const durationDays = "1"; // Valid for 1 day - must be string
     
-    // Create EIP712 signature request with correct parameters
+    // Create EIP712 signature request
     const eip712 = fhevmInstance.createEIP712(
-      publicKey,
+      keypair.publicKey,
       contractAddresses,
       startTimestamp,
       durationDays
     );
     
-    console.log('EIP712 message:', eip712.message);
+    console.log('EIP712 created, signing...');
     
     if (!eip712 || !eip712.domain || !eip712.types || !eip712.message) {
       throw new Error('Invalid EIP712 object from SDK');
     }
     
-    // Remove EIP712Domain from types (ethers.js handles it via domain)
-    const { EIP712Domain, ...typesWithoutDomain } = eip712.types;
-    
-    // Get user signature
+    // Sign with specific type structure (not removing EIP712Domain)
     const signature = await signer.signTypedData(
       eip712.domain,
-      typesWithoutDomain,
+      { UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification },
       eip712.message
     );
-    console.log('Signature obtained');
     
-    // Perform decryption - SDK expects specific parameter format
-    const handleStrings = handles.map(h => h.handle);
+    // Remove "0x" prefix from signature - SDK requirement!
+    const signatureWithoutPrefix = signature.replace("0x", "");
+    console.log('Signature obtained, calling userDecrypt...');
     
-    console.log('Calling userDecrypt with:', {
-      handles: handleStrings,
+    // Call userDecrypt with handle-contract pairs (not just handle strings)
+    const results = await fhevmInstance.userDecrypt(
+      handles, // Array of { handle, contractAddress }
+      keypair.privateKey,
+      keypair.publicKey,
+      signatureWithoutPrefix,
       contractAddresses,
       userAddress,
       startTimestamp,
       durationDays
-    });
-    
-    // Try SDK userDecrypt with object parameter format
-    let results: any;
-    try {
-      // Format 1: Object-based parameters (newer SDK)
-      results = await fhevmInstance.userDecrypt({
-        handles: handleStrings,
-        privateKey,
-        publicKey,
-        signature,
-        contractAddresses,
-        userAddress,
-        startTimestamp,
-        durationDays
-      });
-    } catch (e1: any) {
-      console.log('Object format failed, trying positional:', e1.message);
-      try {
-        // Format 2: Positional parameters (older SDK)
-        results = await fhevmInstance.userDecrypt(
-          handleStrings,
-          privateKey,
-          publicKey,
-          signature,
-          contractAddresses[0], // Single contract address
-          userAddress,
-          startTimestamp,
-          durationDays
-        );
-      } catch (e2: any) {
-        console.error('Both formats failed:', e2.message);
-        throw e2;
-      }
-    }
+    );
     
     console.log('Decryption results:', results);
     
-    // Handle different result formats
+    // Map results back to original handle keys
     const mappedResults: Record<string, bigint | boolean | string> = {};
-    
-    if (Array.isArray(results)) {
-      // Array format: results[i] corresponds to handles[i]
-      handleStrings.forEach((handle, i) => {
-        if (results[i] !== undefined) {
-          mappedResults[handle] = results[i];
-        }
-      });
-    } else if (typeof results === 'object' && results !== null) {
-      // Object format: results[handle] = value
-      for (const h of handles) {
-        if (results[h.handle] !== undefined) {
-          mappedResults[h.handle] = results[h.handle];
-        }
+    for (const h of handles) {
+      if (results[h.handle] !== undefined) {
+        mappedResults[h.handle] = results[h.handle];
       }
     }
     
