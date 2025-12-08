@@ -125,28 +125,30 @@ export default function Home() {
       
       for (let i = 0; i < maxRetries; i++) {
         try {
-          scaleHandle = await publicClient.readContract({
+          const scaleResult = await publicClient.readContract({
             address: CREDIT_PULSE_CONTRACT_ADDRESS,
             abi: CREDIT_PULSE_ABI,
             functionName: 'getScaleGrade',
             args: [address],
-          }) as bigint;
+          });
           
-          healthHandle = await publicClient.readContract({
+          const healthResult = await publicClient.readContract({
             address: CREDIT_PULSE_CONTRACT_ADDRESS,
             abi: CREDIT_PULSE_ABI,
             functionName: 'getHealthGrade',
             args: [address],
-          }) as bigint;
+          });
+          
+          // Convert to bigint safely
+          scaleHandle = scaleResult !== null && scaleResult !== undefined ? BigInt(String(scaleResult)) : null;
+          healthHandle = healthResult !== null && healthResult !== undefined ? BigInt(String(healthResult)) : null;
           
           // Check if we got valid handles (non-zero)
           if (scaleHandle && healthHandle && scaleHandle > BigInt(0) && healthHandle > BigInt(0)) {
             break;
           }
-        } catch (readError) {
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`Retry ${i + 1}/${maxRetries} reading handles...`);
-          }
+        } catch (readError: any) {
+          console.error(`Retry ${i + 1}/${maxRetries} reading handles:`, readError?.message || readError);
         }
         
         // Wait before retry
@@ -157,7 +159,7 @@ export default function Home() {
       
       // Validate handles exist
       if (!scaleHandle || !healthHandle || scaleHandle === BigInt(0) || healthHandle === BigInt(0)) {
-        throw new Error('Assessment data not ready. Please wait a moment and try again.');
+        throw new Error(`Assessment data not ready. scaleHandle=${scaleHandle}, healthHandle=${healthHandle}`);
       }
       
       // Step 5: Decrypt using FHE SDK with user signature
@@ -172,8 +174,10 @@ export default function Home() {
       const signer = await provider.getSigner();
       
       // Convert handles to hex strings (handles are uint256 in Solidity)
-      const scaleHandleHex = `0x${BigInt(scaleHandle as bigint).toString(16).padStart(64, '0')}` as const;
-      const healthHandleHex = `0x${BigInt(healthHandle as bigint).toString(16).padStart(64, '0')}` as const;
+      const scaleHandleHex = `0x${scaleHandle.toString(16).padStart(64, '0')}` as `0x${string}`;
+      const healthHandleHex = `0x${healthHandle.toString(16).padStart(64, '0')}` as `0x${string}`;
+      
+      console.log('Decrypting handles:', { scaleHandleHex, healthHandleHex });
       
       // Prepare handles for decryption
       const handles = [
@@ -182,24 +186,25 @@ export default function Home() {
       ];
       
       const decryptedResults = await fheClient.userDecrypt(handles, signer);
+      console.log('Decrypted results:', decryptedResults);
       
       // Extract decrypted values
-      const scaleScore = Number(decryptedResults[handles[0].handle] || 0);
-      const healthScore = Number(decryptedResults[handles[1].handle] || 0);
+      const scaleScore = Number(decryptedResults[scaleHandleHex] || 0);
+      const healthScore = Number(decryptedResults[healthHandleHex] || 0);
       
       setResult({ scaleScore, healthScore, txHash });
       setState('result');
 
     } catch (err: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Assessment failed:', err);
-      }
+      console.error('Assessment failed:', err);
       
       let errorMessage = 'Assessment failed';
       if (err.message?.includes('user rejected')) {
         errorMessage = 'Transaction cancelled';
       } else if (err.message?.includes('insufficient funds')) {
         errorMessage = 'Insufficient ETH. Get Sepolia ETH from faucet.';
+      } else if (err.message?.includes('BigNumberish')) {
+        errorMessage = 'Data conversion error. Please try again.';
       } else if (err.message) {
         errorMessage = err.message;
       }
