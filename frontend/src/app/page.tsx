@@ -105,31 +105,60 @@ export default function Home() {
       // Step 3: Wait for transaction confirmation and on-chain FHE computation
       setProcessingStep('computing');
       
-      // Wait for transaction receipt
-      if (publicClient) {
-        await publicClient.waitForTransactionReceipt({ hash: txHash });
+      if (!publicClient) {
+        throw new Error('Public client not available');
       }
       
+      // Wait for transaction receipt
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      
       // Additional wait for FHE computation to complete on-chain
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 8000));
 
-      // Step 4: Read encrypted handles from contract
+      // Step 4: Read encrypted handles from contract with retry
       setProcessingStep('decrypting');
       
-      // Read the encrypted handles from contract
-      const scaleHandle = await publicClient?.readContract({
-        address: CREDIT_PULSE_CONTRACT_ADDRESS,
-        abi: CREDIT_PULSE_ABI,
-        functionName: 'getScaleGrade',
-        args: [address],
-      });
+      // Retry logic for reading handles (FHE computation may take time)
+      let scaleHandle: bigint | null = null;
+      let healthHandle: bigint | null = null;
+      const maxRetries = 3;
       
-      const healthHandle = await publicClient?.readContract({
-        address: CREDIT_PULSE_CONTRACT_ADDRESS,
-        abi: CREDIT_PULSE_ABI,
-        functionName: 'getHealthGrade',
-        args: [address],
-      });
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          scaleHandle = await publicClient.readContract({
+            address: CREDIT_PULSE_CONTRACT_ADDRESS,
+            abi: CREDIT_PULSE_ABI,
+            functionName: 'getScaleGrade',
+            args: [address],
+          }) as bigint;
+          
+          healthHandle = await publicClient.readContract({
+            address: CREDIT_PULSE_CONTRACT_ADDRESS,
+            abi: CREDIT_PULSE_ABI,
+            functionName: 'getHealthGrade',
+            args: [address],
+          }) as bigint;
+          
+          // Check if we got valid handles (non-zero)
+          if (scaleHandle && healthHandle && scaleHandle > 0n && healthHandle > 0n) {
+            break;
+          }
+        } catch (readError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`Retry ${i + 1}/${maxRetries} reading handles...`);
+          }
+        }
+        
+        // Wait before retry
+        if (i < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+      }
+      
+      // Validate handles exist
+      if (!scaleHandle || !healthHandle || scaleHandle === 0n || healthHandle === 0n) {
+        throw new Error('Assessment data not ready. Please wait a moment and try again.');
+      }
       
       // Step 5: Decrypt using FHE SDK with user signature
       // Get ethereum provider from window
@@ -142,10 +171,14 @@ export default function Home() {
       const provider = new BrowserProvider(ethereum);
       const signer = await provider.getSigner();
       
+      // Convert handles to hex strings (handles are uint256 in Solidity)
+      const scaleHandleHex = `0x${BigInt(scaleHandle as bigint).toString(16).padStart(64, '0')}` as const;
+      const healthHandleHex = `0x${BigInt(healthHandle as bigint).toString(16).padStart(64, '0')}` as const;
+      
       // Prepare handles for decryption
       const handles = [
-        { handle: `0x${BigInt(scaleHandle as bigint).toString(16).padStart(64, '0')}`, contractAddress: CREDIT_PULSE_CONTRACT_ADDRESS },
-        { handle: `0x${BigInt(healthHandle as bigint).toString(16).padStart(64, '0')}`, contractAddress: CREDIT_PULSE_CONTRACT_ADDRESS },
+        { handle: scaleHandleHex, contractAddress: CREDIT_PULSE_CONTRACT_ADDRESS },
+        { handle: healthHandleHex, contractAddress: CREDIT_PULSE_CONTRACT_ADDRESS },
       ];
       
       const decryptedResults = await fheClient.userDecrypt(handles, signer);
