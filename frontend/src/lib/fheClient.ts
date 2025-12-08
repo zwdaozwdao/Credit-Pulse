@@ -91,21 +91,8 @@ export const fheClient = {
   },
 
   /**
-   * Public Decryption - for handles marked as publicly decryptable on-chain
-   * Used after contract calls FHE.makePubliclyDecryptable()
-   */
-  async publicDecrypt(handles: string[]): Promise<Record<string, bigint | boolean | string>> {
-    if (!fhevmInstance) {
-      throw new Error('FHE not initialized');
-    }
-    
-    const results = await fhevmInstance.publicDecrypt(handles);
-    return results;
-  },
-
-  /**
-   * User Decryption - for handles that require user signature
-   * Requires EIP712 signature from the user
+   * User Decryption - decrypt handles using EIP712 signature
+   * This is required when contract uses FHE.allow() instead of FHE.makePubliclyDecryptable()
    */
   async userDecrypt(
     handles: Array<{ handle: string; contractAddress: string }>,
@@ -121,15 +108,14 @@ export const fheClient = {
     // Get contract addresses from handles
     const contractAddresses = [...new Set(handles.map(h => h.contractAddress))];
     
-    // Create EIP712 signature request
-    const startTimestamp = Math.floor(Date.now() / 1000);
-    const durationDays = 1; // Valid for 1 day
+    // Get user address
+    const userAddress = await signer.getAddress();
     
+    // Create EIP712 signature request
     const eip712 = fhevmInstance.createEIP712(
       publicKey,
       contractAddresses,
-      startTimestamp,
-      durationDays
+      userAddress
     );
     
     // Remove EIP712Domain from types (ethers.js handles it via domain)
@@ -142,43 +128,26 @@ export const fheClient = {
       eip712.message
     );
     
-    // Get user address
-    const userAddress = await signer.getAddress();
-    
-    // Perform decryption
+    // Perform decryption - pass handles as array of handle strings
+    const handleStrings = handles.map(h => h.handle);
     const results = await fhevmInstance.userDecrypt(
-      handles,
+      handleStrings,
       privateKey,
       publicKey,
       signature,
       contractAddresses,
-      userAddress,
-      startTimestamp,
-      durationDays
+      userAddress
     );
     
-    return results;
-  },
-
-  /**
-   * Decrypt assessment results (scale grade and health grade)
-   * Uses public decryption if handles are marked publicly decryptable
-   */
-  async decryptAssessmentResults(
-    scaleGradeHandle: string,
-    healthGradeHandle: string
-  ): Promise<{ scaleGrade: number; healthGrade: number }> {
-    if (!fhevmInstance) {
-      throw new Error('FHE not initialized');
+    // Map results back to original handle keys
+    const mappedResults: Record<string, bigint | boolean | string> = {};
+    for (const h of handles) {
+      if (results[h.handle] !== undefined) {
+        mappedResults[h.handle] = results[h.handle];
+      }
     }
     
-    const results = await this.publicDecrypt([scaleGradeHandle, healthGradeHandle]);
-    
-    // Extract values from results
-    const scaleGrade = Number(results[scaleGradeHandle] || 0);
-    const healthGrade = Number(results[healthGradeHandle] || 0);
-    
-    return { scaleGrade, healthGrade };
+    return mappedResults;
   },
 
   reset(): void {
