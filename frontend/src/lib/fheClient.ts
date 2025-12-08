@@ -104,19 +104,41 @@ export const fheClient = {
     
     // Generate keypair for decryption
     const { publicKey, privateKey } = fhevmInstance.generateKeypair();
+    console.log('Generated keypair, publicKey length:', publicKey?.length);
     
     // Get contract addresses from handles
     const contractAddresses = [...new Set(handles.map(h => h.contractAddress))];
     
     // Get user address
     const userAddress = await signer.getAddress();
+    console.log('User address:', userAddress);
+    console.log('Contract addresses:', contractAddresses);
+    console.log('Handles:', handles.map(h => h.handle));
     
-    // Create EIP712 signature request
-    const eip712 = fhevmInstance.createEIP712(
-      publicKey,
-      contractAddresses,
-      userAddress
-    );
+    // Create EIP712 signature request - check available methods
+    console.log('fhevmInstance methods:', Object.keys(fhevmInstance));
+    
+    // Try different API patterns based on SDK version
+    let eip712: any;
+    try {
+      // Try v0.9+ API with generatePublicKey first
+      if (typeof fhevmInstance.generatePublicKey === 'function') {
+        const reencryptionKey = fhevmInstance.generatePublicKey(contractAddresses[0]);
+        eip712 = fhevmInstance.createEIP712(reencryptionKey, contractAddresses[0]);
+      } else {
+        // Fallback to older API
+        eip712 = fhevmInstance.createEIP712(publicKey, contractAddresses, userAddress);
+      }
+    } catch (e: any) {
+      console.error('createEIP712 failed:', e);
+      throw new Error(`Failed to create EIP712: ${e.message}`);
+    }
+    
+    console.log('EIP712 object:', JSON.stringify(eip712, null, 2));
+    
+    if (!eip712 || !eip712.domain || !eip712.types || !eip712.message) {
+      throw new Error('Invalid EIP712 object from SDK');
+    }
     
     // Remove EIP712Domain from types (ethers.js handles it via domain)
     const { EIP712Domain, ...typesWithoutDomain } = eip712.types;
@@ -127,6 +149,7 @@ export const fheClient = {
       typesWithoutDomain,
       eip712.message
     );
+    console.log('Signature obtained');
     
     // Perform decryption - pass handles as array of handle strings
     const handleStrings = handles.map(h => h.handle);
@@ -138,6 +161,8 @@ export const fheClient = {
       contractAddresses,
       userAddress
     );
+    
+    console.log('Decryption results:', results);
     
     // Map results back to original handle keys
     const mappedResults: Record<string, bigint | boolean | string> = {};
