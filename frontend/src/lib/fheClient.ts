@@ -140,26 +140,69 @@ export const fheClient = {
     );
     console.log('Signature obtained');
     
-    // Perform decryption
+    // Perform decryption - SDK expects specific parameter format
     const handleStrings = handles.map(h => h.handle);
-    const results = await fhevmInstance.userDecrypt(
-      handleStrings,
-      privateKey,
-      publicKey,
-      signature,
+    
+    console.log('Calling userDecrypt with:', {
+      handles: handleStrings,
       contractAddresses,
       userAddress,
       startTimestamp,
       durationDays
-    );
+    });
+    
+    // Try SDK userDecrypt with object parameter format
+    let results: any;
+    try {
+      // Format 1: Object-based parameters (newer SDK)
+      results = await fhevmInstance.userDecrypt({
+        handles: handleStrings,
+        privateKey,
+        publicKey,
+        signature,
+        contractAddresses,
+        userAddress,
+        startTimestamp,
+        durationDays
+      });
+    } catch (e1: any) {
+      console.log('Object format failed, trying positional:', e1.message);
+      try {
+        // Format 2: Positional parameters (older SDK)
+        results = await fhevmInstance.userDecrypt(
+          handleStrings,
+          privateKey,
+          publicKey,
+          signature,
+          contractAddresses[0], // Single contract address
+          userAddress,
+          startTimestamp,
+          durationDays
+        );
+      } catch (e2: any) {
+        console.error('Both formats failed:', e2.message);
+        throw e2;
+      }
+    }
     
     console.log('Decryption results:', results);
     
-    // Map results back to original handle keys
+    // Handle different result formats
     const mappedResults: Record<string, bigint | boolean | string> = {};
-    for (const h of handles) {
-      if (results[h.handle] !== undefined) {
-        mappedResults[h.handle] = results[h.handle];
+    
+    if (Array.isArray(results)) {
+      // Array format: results[i] corresponds to handles[i]
+      handleStrings.forEach((handle, i) => {
+        if (results[i] !== undefined) {
+          mappedResults[handle] = results[i];
+        }
+      });
+    } else if (typeof results === 'object' && results !== null) {
+      // Object format: results[handle] = value
+      for (const h of handles) {
+        if (results[h.handle] !== undefined) {
+          mappedResults[h.handle] = results[h.handle];
+        }
       }
     }
     
